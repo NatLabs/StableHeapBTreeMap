@@ -50,7 +50,7 @@ module {
     rebalancedChildIndex: Nat,
     leftChildInsert: Types.Node<K, V>,
     rightChildInsert: Types.Node<K, V>
-  ): ([var ?Types.Node<K, V>], [var ?Types.Node<K, V>]) {
+  ): (rightSplit: [var ?Types.Node<K, V>]) {
     AU.splitArrayAndInsertTwo<Types.Node<K, V>>(children, rebalancedChildIndex, leftChildInsert, rightChildInsert);
   };
 

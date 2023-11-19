@@ -1,6 +1,7 @@
 /// A collection of Array utility functions **specific** to the BTree implementation
 import Array "mo:base/Array";
 import Debug "mo:base/Debug";
+import Iter "mo:base/Iter";
 
 module {
   /// Inserts an element into a mutable array at a specific index, shifting all other elements over
@@ -36,7 +37,18 @@ module {
     };
   };
 
+  func extract<T>(array: [var ?T], index: Nat): ?T {
+    let tmp = array[index];
+    array[index] := null;
+    tmp;
+  };
 
+    func print_val<T>(opt: ?T) : Text{
+      switch(opt) {
+        case (?el) { "1" };
+        case null { "0" };
+      }
+    };
   
   /// Splits the array into two halves as if the insert has occured, omitting the middle element and returning it so that it can
   /// be promoted to the parent internal node. This is used when inserting an element into an array of key-value data pairs that 
@@ -53,64 +65,85 @@ module {
   public func insertOneAtIndexAndSplitArray<T>(array: [var ?T], insertElement: T, insertIndex: Nat): ([var ?T], T, [var ?T]) {
     // split at the BTree order / 2
     let splitIndex = (array.size() + 1) / 2;
+      var avoid_tabulate_var_bug = false;
+    
     // this function assumes the the splitIndex is in the middle of the kvs array - trap otherwise
     if (splitIndex > array.size()) { assert false; };
-
-    let leftSplit = 
-      if (insertIndex < splitIndex) {
-        Array.tabulateVar<?T>(array.size(), func(i) {
-          // if below the split index
-          if (i < splitIndex) { 
-            // if below the insert index, copy over
-            if (i < insertIndex) { array[i] }
-            // if less than the insert index, copy over the previous element (since the inserted element has taken up 1 extra slot)
-            else if (i > insertIndex) { array[i-1] }
-            // if equal to the insert index add the element to be inserted to the left split
-            else { ?insertElement }
-          }
-          else { null }
-        });
-      } 
-      // index >= splitIndex
-      else {
-        Array.tabulateVar<?T>(array.size(), func(i) {
-          // right biased splitting
-          if (i < splitIndex) { array[i] } 
-          else { null }
-        });
-      };
 
     let (rightSplit, middleElement): ([var ?T], ?T) = 
       // if insert > split index, inserted element will be inserted into the right split
       if (insertIndex > splitIndex) {
+        avoid_tabulate_var_bug := false;
+
         let right = Array.tabulateVar<?T>(array.size(), func(i) {
+          if (i == 0 and not avoid_tabulate_var_bug){
+            avoid_tabulate_var_bug := true;
+            return null;
+          };
+
           let adjIndex = i + splitIndex + 1; // + 1 accounts for the fact that the split element was part of the original array
           if (adjIndex <= array.size()) {
-            if (adjIndex < insertIndex) { array[adjIndex] }
-            else if (adjIndex > insertIndex) { array[adjIndex-1] }
+            if (adjIndex < insertIndex) { 
+              extract(array, adjIndex);
+            }
+            else if (adjIndex > insertIndex) { 
+              extract(array, adjIndex - 1 : Nat);
+            }
             else { ?insertElement }
           } 
           else { null }
         });
-        (right, array[splitIndex]);
+
+        (right, extract(array, splitIndex));
       } 
       // if inserted element was placed in the left split
       else if (insertIndex < splitIndex) {
+        avoid_tabulate_var_bug := false;
+
         let right = Array.tabulateVar<?T>(array.size(), func(i) {
+          if (i == 0 and not avoid_tabulate_var_bug){
+            avoid_tabulate_var_bug := true;
+            return null;
+          };
           let adjIndex = i + splitIndex;
-          if (adjIndex < array.size()) { array[adjIndex] } 
+          if (adjIndex < array.size()) { extract(array, adjIndex) } 
           else { null }
         });
-        (right, array[splitIndex-1]);
+        (right, extract(array, splitIndex - 1 : Nat));
       } 
       // insertIndex == splitIndex
       else {
+        avoid_tabulate_var_bug := false;
         let right = Array.tabulateVar<?T>(array.size(), func(i) {
+          if (i == 0 and not avoid_tabulate_var_bug){
+            avoid_tabulate_var_bug := true;
+            return null;
+          };
           let adjIndex = i + splitIndex;
-          if (adjIndex < array.size()) { array[adjIndex] } 
+          if (adjIndex < array.size()) { extract(array, adjIndex) } 
           else { null }
         });
         (right, ?insertElement);
+      };
+
+    let leftSplit = 
+      if (insertIndex < splitIndex) {
+        
+        var j = splitIndex - 1 : Nat;
+
+        while (j >= insertIndex){
+          array[j + 1] := array[j];
+
+          if ( j > 0 ){ j -= 1; };
+        };
+        
+        array[insertIndex] := ?insertElement;
+        array;
+      } 
+      // index >= splitIndex
+      else {
+        // right biased splitting
+        array;
       };
 
     switch(middleElement) {
@@ -118,8 +151,6 @@ module {
       case (?el) { (leftSplit, el, rightSplit) }
     }
   };
-
-
   
   /// Context of use: This function is used after inserting a child node into the full child of an internal node that is also full. 
   /// From the insertion, the full child is rebalanced and split, and then since the internal node is full, when replacing the two
@@ -138,57 +169,76 @@ module {
   /// rebalancedChildIndex - the index used to mark where the rebalanced left and right children will be inserted
   /// leftChildInsert - the rebalanced left child being inserted
   /// rightChildInsert - the rebalanced right child being inserted
-  public func splitArrayAndInsertTwo<T>(children: [var ?T], rebalancedChildIndex: Nat, leftChildInsert: T, rightChildInsert: T): ([var ?T], [var ?T]) {
+  public func splitArrayAndInsertTwo<T>(children: [var ?T], rebalancedChildIndex: Nat, leftChildInsert: T, rightChildInsert: T): [var ?T] {
     let splitIndex = children.size() / 2;
-
-    let leftRebalancedChildren = Array.tabulateVar<?T>(children.size(), func(i) {
-      // only insert elements up to the split index and fill the rest of the children with nulls
-      if (i <= splitIndex) { 
-        if (i < rebalancedChildIndex) { children[i] }
-        // insert the left and right rebalanced child halves if the rebalancedChildIndex comes before the splitIndex
-        else if (i == rebalancedChildIndex) { ?leftChildInsert }
-        else if (i == rebalancedChildIndex + 1) { ?rightChildInsert }
-        else { children[i-1] } // i > rebalancedChildIndex
-      } else { null }
-    });
+    var avoid_tabulate_var_bug = false;
 
     let rightRebalanceChildren: [var ?T] = 
       // Case 1: if both left and right rebalanced halves were inserted into the left child can just go from the split index onwards
       if (rebalancedChildIndex + 1 <= splitIndex) {
         Array.tabulateVar<?T>(children.size(), func(i) {
+          if (i == 0 and not avoid_tabulate_var_bug){
+            avoid_tabulate_var_bug := true;
+            return null;
+          };
           let adjIndex = i + splitIndex;
-          if (adjIndex < children.size()) { children[adjIndex] }
+          if (adjIndex < children.size()) { extract(children, adjIndex) }
           else { null }
         })
       } 
       // Case 2: if both left and right rebalanced halves will be inserted into the right child
       else if (rebalancedChildIndex > splitIndex) {
         var rebalanceOffset = 0;
+        var avoid_tabulate_var_bug = false;
+
         Array.tabulateVar<?T>(children.size(), func(i) {
+          if (i == 0 and not avoid_tabulate_var_bug){
+            avoid_tabulate_var_bug := true;
+            return null;
+          };
           let adjIndex = i + splitIndex + 1;
           if (adjIndex == rebalancedChildIndex) { ?leftChildInsert }
           else if (adjIndex == rebalancedChildIndex + 1) { 
             rebalanceOffset := 1; // after inserting both rebalanced children, any elements coming after are from the previous index 
             ?rightChildInsert;
-          } else if (adjIndex <= children.size()) { children[adjIndex - rebalanceOffset] }
+          } else if (adjIndex <= children.size()) { extract(children, adjIndex - rebalanceOffset : Nat) }
           else { null }
         })
       }  
       // Case 3: if left rebalanced half was in left child, and right rebalanced half will be in right child
       // rebalancedChildIndex == splitIndex
       else { 
+        var avoid_tabulate_var_bug = false;
         Array.tabulateVar<?T>(children.size(), func(i) {
+          if (i == 0 and not avoid_tabulate_var_bug){
+            avoid_tabulate_var_bug := true;
+            return null;
+          };
           // first element is the right rebalanced half
           if (i == 0) { ?rightChildInsert }
           else {
             let adjIndex = i + splitIndex;
-            if (adjIndex < children.size()) { children[adjIndex] }
+            if (adjIndex < children.size()) { extract(children, adjIndex) }
             else { null }
           }
         })
       };
 
-    (leftRebalancedChildren, rightRebalanceChildren)
+    var j = splitIndex - 1: Nat;
+
+    while (j >= rebalancedChildIndex){
+      if (j == rebalancedChildIndex + 1) {
+        children[rebalancedChildIndex + 1] := ?rightChildInsert;
+      } else if (j == rebalancedChildIndex) {
+        children[rebalancedChildIndex] := ?leftChildInsert;
+      }else {
+        children[j + 1] := children[j];
+      };
+
+      if (j > 0) {j -= 1};
+    };
+
+    rightRebalanceChildren
   };
 
 

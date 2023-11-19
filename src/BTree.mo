@@ -1597,12 +1597,14 @@ module {
               let rightCount: Nat = if (order % 2 == 0) { leftCount - 1 } else { leftCount };
 
               // split internal children
-              let (leftChildren, rightChildren) = NU.splitChildrenInTwoWithRebalances<K, V>(
+              let rightChildren = NU.splitChildrenInTwoWithRebalances<K, V>(
                 internalNode.children,
                 insertIndex,
                 leftChild,
                 rightChild
               );
+
+              let leftChildren = internalNode.children;
 
               // send the kv to be promoted, as well as the internal children left and right split 
               #promote({
@@ -1646,6 +1648,7 @@ module {
           case null { Debug.trap("UNREACHABLE_ERROR: file a bug report! In leafUpdateHelper, when matching on a #keyFound previous value, the previous kv turned out to be null") };
         }
       };
+    
       case (#notFound(insertIndex)) {
         // Note: BTree will always have an order >= 4, so this will never have negative Nat overflow
         let maxKeys: Nat = order - 1;
@@ -1718,12 +1721,14 @@ module {
               let rightCount: Nat = if (order % 2 == 0) { leftCount - 1 } else { leftCount };
 
               // split internal children
-              let (leftChildren, rightChildren) = NU.splitChildrenInTwoWithRebalances<K, V>(
+              let rightChildren = NU.splitChildrenInTwoWithRebalances<K, V>(
                 internalNode.children,
                 insertIndex,
                 leftChild,
                 rightChild
               );
+
+              let leftChildren = internalNode.children;
 
               // send the kv to be promoted, as well as the internal children left and right split 
               #promote({

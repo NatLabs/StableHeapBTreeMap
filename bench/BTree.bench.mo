@@ -24,8 +24,8 @@ module {
         bench.name("RBTree vs BTree");
         bench.description("Benchmarking the performance with 10k entries");
 
-        bench.rows(["Region", "MemoryRegion"]);
-        bench.cols(["insert()", "get()", "update()", "delete()"]);
+        bench.rows(["RBTree", "BTree"]);
+        bench.cols(["insert()", "get()",  "delete()"]);
 
         let limit = 10_000;
 
@@ -54,10 +54,9 @@ module {
                         ignore rbtree.get(i);
                     };
                 };
-                case("RBTree", "update()") {};
                 case("RBTree", "delete()") {
                     for (i in Iter.range(0, limit - 1)) {
-                        ignore rbtree.remove(i);
+                        rbtree.delete(i);
                     };
                 };
 
@@ -74,23 +73,11 @@ module {
                         ignore BTree.get(btree, Nat.compare, i);
                     };
                 };
-                case("BTree", "update()") {
-                    for (i in Iter.range(0, limit - 1)) {
-                        ignore BTree.update(btree, Nat.compare, i, func(prev: ?Nat): Nat {
-                            switch (prev) {
-                                case (null) { 0 };
-                                case (?prev) { prev ** 2 };
-                            };
-                        });
-                    };
-                };
-
                 case ("BTree", "delete()") {
                     for (i in Iter.range(0, limit - 1)) {
                         ignore BTree.delete(btree, Nat.compare, i);
                     };
                 };
-
                 case (_) {
                     Debug.trap("Should not reach with row = " # debug_show row # " and col = " # debug_show col);
                 };
